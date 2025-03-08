@@ -13,17 +13,59 @@ import { MessageInput } from "@/components/chat/message-input";
 import { LogOut, Users, User as UserIcon } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
+// Added GroupHeader component
+const GroupHeader = ({ group, isAdmin, onDeleteGroup }) => {
+  return (
+    <div className="p-4 border-b">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Avatar>
+            {group.profileImage ? (
+              <AvatarImage src={group.profileImage} alt={group.name} />
+            ) : (
+              <AvatarFallback>
+                <Users className="h-4 w-4" />
+              </AvatarFallback>
+            )}
+          </Avatar>
+          <div>
+            <h2 className="font-semibold text-primary">{group.name}</h2>
+            <div className="text-xs text-muted-foreground">
+              {group.members.length} members
+            </div>
+          </div>
+        </div>
+        {isAdmin && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs text-destructive border-destructive hover:bg-destructive/10"
+            onClick={() => {
+              if (window.confirm("Are you sure you want to delete this group? This action cannot be undone.")) {
+                onDeleteGroup(group.id);
+              }
+            }}
+          >
+            Delete Group
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+};
+
+
 export default function HomePage() {
   const { user, logoutMutation } = useAuth();
-  const { 
-    users, 
-    sendMessage, 
-    getMessages, 
-    typingUsers, 
-    sendTypingStatus, 
-    editMessage, 
-    deleteMessage, 
-    deleteChatHistory 
+  const {
+    users,
+    sendMessage,
+    getMessages,
+    typingUsers,
+    sendTypingStatus,
+    editMessage,
+    deleteMessage,
+    deleteChatHistory,
   } = useChat();
 
   const {
@@ -34,7 +76,8 @@ export default function HomePage() {
     getGroupMessages,
     getGroupMembers,
     typingUsers: groupTypingUsers,
-    sendGroupTypingStatus
+    sendGroupTypingStatus,
+    deleteGroup,
   } = useGroupChat();
 
   const [selectedUser, setSelectedUser] = useState<User>();
@@ -228,8 +271,8 @@ export default function HomePage() {
                   </span>
                 )}
               </div>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 size="sm"
                 className="text-xs text-destructive border-destructive hover:bg-destructive/10"
                 onClick={() => {
@@ -242,9 +285,9 @@ export default function HomePage() {
               </Button>
             </div>
           </div>
-          <MessageList 
-            messages={messages} 
-            selectedUser={selectedUser} 
+          <MessageList
+            messages={messages}
+            selectedUser={selectedUser}
             onEditMessage={handleEditMessage}
             onDeleteMessage={handleDeleteMessage}
           />
@@ -257,34 +300,16 @@ export default function HomePage() {
         </div>
       ) : activeTab === "groups" && selectedGroup ? (
         <div className="flex-1 flex flex-col bg-white/50 backdrop-blur-sm">
-          <div className="p-4 border-b">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Avatar>
-                  {selectedGroup.profileImage ? (
-                    <AvatarImage src={selectedGroup.profileImage} alt={selectedGroup.name} />
-                  ) : (
-                    <AvatarFallback>
-                      <Users className="h-4 w-4" />
-                    </AvatarFallback>
-                  )}
-                </Avatar>
-                <div>
-                  <h2 className="font-semibold text-primary">{selectedGroup.name}</h2>
-                  <div className="text-xs text-muted-foreground">
-                    {groupMembers.length} members
-                  </div>
-                </div>
-                {getGroupTypingText() && (
-                  <span className="text-xs italic text-muted-foreground ml-2">
-                    {getGroupTypingText()}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-          <GroupMessageList 
-            messages={groupMessages} 
+          <GroupHeader 
+            group={selectedGroup} 
+            isAdmin={groupMembers.some((m) => m.id === user?.id && m.isAdmin)} 
+            onDeleteGroup={groupId => {
+              deleteGroup.mutate(groupId);
+              setSelectedGroup(null); //Added to reset selected group after deletion
+            }} 
+          />
+          <GroupMessageList
+            messages={groupMessages}
             groupId={selectedGroup.id}
             onEditMessage={handleEditMessage}
             onDeleteMessage={handleDeleteMessage}

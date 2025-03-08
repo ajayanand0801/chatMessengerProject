@@ -177,6 +177,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to fetch group" });
     }
   });
+  
+  // Delete a group
+  app.delete("/api/groups/:groupId", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    try {
+      const groupId = parseInt(req.params.groupId);
+      
+      // Check if user is an admin of the group
+      const isAdmin = await storage.isUserGroupAdmin(req.user!.id, groupId);
+      if (!isAdmin) {
+        return res.status(403).json({ error: "You don't have permission to delete this group" });
+      }
+      
+      await storage.deleteGroup(groupId);
+      res.sendStatus(200);
+    } catch (error) {
+      console.error("Error deleting group:", error);
+      res.status(500).json({ error: "Failed to delete group" });
+    }
+  });
 
   app.get("/api/groups/:groupId/members", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
@@ -253,6 +273,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching group messages:", error);
       res.status(500).json({ error: "Failed to fetch group messages" });
+    }
+  });
+  
+  // API endpoint for sending group messages (fallback when WebSocket fails)
+  app.post("/api/groups/:groupId/messages", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    try {
+      const groupId = parseInt(req.params.groupId);
+      const { content, attachmentUrl } = req.body;
+      
+      // Check if user is a member of the group
+      const isMember = await storage.isUserInGroup(req.user!.id, groupId);
+      if (!isMember) {
+        return res.status(403).json({ error: "You are not a member of this group" });
+      }
+      
+      const message = await storage.createGroupMessage(req.user!.id, { 
+        content, 
+        groupId, 
+        attachmentUrl 
+      });
+      
+      // Get the user data to include in response
+      const sender = await storage.getUserById(req.user!.id);
+      
+      res.status(201).json({
+        message,
+        sender: {
+          id: sender.id,
+          username: sender.username,
+          profileImage: sender.profileImage
+        }
+      });
+    } catch (error) {
+      console.error("Error creating group message:", error);
+      res.status(500).json({ error: "Failed to create group message" });
     }
   });
 

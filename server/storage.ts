@@ -356,6 +356,27 @@ export const storage = {
         )
       );
     return result.length > 0;
+  },
+  
+  async deleteGroup(groupId: number) {
+    return await db.transaction(async (tx) => {
+      // First delete all group messages
+      await tx
+        .delete(groupMessages)
+        .where(eq(groupMessages.groupId, groupId));
+      
+      // Then delete all group members
+      await tx
+        .delete(groupMembers)
+        .where(eq(groupMembers.groupId, groupId));
+      
+      // Finally delete the group itself
+      await tx
+        .delete(groups)
+        .where(eq(groups.id, groupId));
+        
+      return true;
+    });
   }
 };
 
