@@ -1,8 +1,12 @@
 import { User, Message, InsertUser, InsertMessage } from "@shared/schema";
 import session from "express-session";
-import createMemoryStore from "memorystore";
+import { db } from "./db";
+import { users, messages } from "@shared/schema";
+import { eq, or, and } from "drizzle-orm";
+import connectPg from "connect-pg-simple";
+import { pool } from "./db";
 
-const MemoryStore = createMemoryStore(session);
+const PostgresSessionStore = connectPg(session);
 
 export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
@@ -10,78 +14,79 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   getAllUsers(): Promise<User[]>;
   setUserOnlineStatus(userId: number, isOnline: boolean): Promise<void>;
-  
+
   createMessage(senderId: number, message: InsertMessage): Promise<Message>;
   getMessages(userId1: number, userId2: number): Promise<Message[]>;
-  
+
   sessionStore: session.Store;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<number, User>;
-  private messages: Map<number, Message>;
-  private currentUserId: number;
-  private currentMessageId: number;
+export class DatabaseStorage implements IStorage {
   sessionStore: session.Store;
 
   constructor() {
-    this.users = new Map();
-    this.messages = new Map();
-    this.currentUserId = 1;
-    this.currentMessageId = 1;
-    this.sessionStore = new MemoryStore({
-      checkPeriod: 86400000,
+    this.sessionStore = new PostgresSessionStore({
+      pool,
+      createTableIfMissing: true,
     });
   }
 
   async getUser(id: number): Promise<User | undefined> {
-    return this.users.get(id);
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const id = this.currentUserId++;
-    const user: User = { ...insertUser, id, isOnline: false };
-    this.users.set(id, user);
+    const [user] = await db.insert(users).values(insertUser).returning();
     return user;
   }
 
   async getAllUsers(): Promise<User[]> {
-    return Array.from(this.users.values());
+    return await db.select().from(users);
   }
 
   async setUserOnlineStatus(userId: number, isOnline: boolean): Promise<void> {
-    const user = await this.getUser(userId);
-    if (user) {
-      this.users.set(userId, { ...user, isOnline });
-    }
+    await db
+      .update(users)
+      .set({ isOnline })
+      .where(eq(users.id, userId));
   }
 
   async createMessage(senderId: number, message: InsertMessage): Promise<Message> {
-    const id = this.currentMessageId++;
-    const newMessage: Message = {
-      id,
-      senderId,
-      content: message.content,
-      receiverId: message.receiverId,
-      createdAt: new Date(),
-    };
-    this.messages.set(id, newMessage);
+    const [newMessage] = await db
+      .insert(messages)
+      .values({
+        senderId,
+        content: message.content,
+        receiverId: message.receiverId,
+      })
+      .returning();
     return newMessage;
   }
 
   async getMessages(userId1: number, userId2: number): Promise<Message[]> {
-    return Array.from(this.messages.values()).filter(
-      (msg) =>
-        (msg.senderId === userId1 && msg.receiverId === userId2) ||
-        (msg.senderId === userId2 && msg.receiverId === userId1),
-    );
+    return await db
+      .select()
+      .from(messages)
+      .where(
+        or(
+          and(
+            eq(messages.senderId, userId1),
+            eq(messages.receiverId, userId2)
+          ),
+          and(
+            eq(messages.senderId, userId2),
+            eq(messages.receiverId, userId1)
+          )
+        )
+      )
+      .orderBy(messages.createdAt);
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
