@@ -2,7 +2,7 @@ import { User, Message, InsertUser, InsertMessage } from "@shared/schema";
 import session from "express-session";
 import { db } from "./db";
 import { users, messages } from "@shared/schema";
-import { eq, or, and, not } from "drizzle-orm";
+import { eq, or, and, not, sql } from "drizzle-orm";
 import connectPg from "connect-pg-simple";
 import { pool } from "./db";
 
@@ -95,7 +95,7 @@ export class DatabaseStorage implements IStorage {
           senderId,
           content: message.content,
           receiverId: message.receiverId,
-          attachmentUrl: message.attachmentUrl, //Added from edited snippet
+          attachmentUrl: message.attachmentUrl,
         })
         .returning();
       return newMessage;
@@ -175,10 +175,10 @@ export class DatabaseStorage implements IStorage {
 
   async getUnreadMessageCount(userId: number): Promise<Record<number, number>> {
     try {
-      const unreadMessages = await db
+      const result = await db
         .select({
           senderId: messages.senderId,
-          count: db.fn.count(messages.id)
+          count: sql<number>`count(*)::int`
         })
         .from(messages)
         .where(
@@ -190,8 +190,8 @@ export class DatabaseStorage implements IStorage {
         )
         .groupBy(messages.senderId);
 
-      return unreadMessages.reduce((acc, { senderId, count }) => {
-        acc[senderId] = Number(count);
+      return result.reduce((acc, { senderId, count }) => {
+        acc[senderId] = count;
         return acc;
       }, {} as Record<number, number>);
     } catch (error) {
