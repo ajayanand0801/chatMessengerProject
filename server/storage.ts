@@ -170,6 +170,29 @@ export class DatabaseStorage implements IStorage {
       throw new Error('Failed to delete message');
     }
   }
+  
+  async deleteChatHistory(userId1: number, userId2: number): Promise<void> {
+    try {
+      await db
+        .update(messages)
+        .set({ isDeleted: true })
+        .where(
+          or(
+            and(
+              eq(messages.senderId, userId1),
+              eq(messages.receiverId, userId2)
+            ),
+            and(
+              eq(messages.senderId, userId2),
+              eq(messages.receiverId, userId1)
+            )
+          )
+        );
+    } catch (error) {
+      console.error('Error deleting chat history:', error);
+      throw new Error('Failed to delete chat history');
+    }
+  }
 
   async editMessage(messageId: number, newContent: string): Promise<Message> {
     try {

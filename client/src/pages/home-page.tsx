@@ -11,7 +11,7 @@ import { ProfileImage } from "@/components/profile/profile-image";
 
 export default function HomePage() {
   const { user, logoutMutation } = useAuth();
-  const { users, sendMessage, getMessages, typingUsers, sendTypingStatus, editMessage, deleteMessage } = useChat();
+  const { users, sendMessage, getMessages, typingUsers, sendTypingStatus, editMessage, deleteMessage, deleteChatHistory } = useChat();
   const [selectedUser, setSelectedUser] = useState<User>();
 
   const { data: messages = [] } = getMessages(selectedUser?.id ?? 0);
@@ -80,18 +80,32 @@ export default function HomePage() {
       {selectedUser ? (
         <div className="flex-1 flex flex-col bg-white/50 backdrop-blur-sm">
           <div className="p-4 border-b">
-            <div className="flex items-center gap-2">
-              <div
-                className={`w-2 h-2 rounded-full ${
-                  selectedUser.isOnline ? "bg-emerald-500" : "bg-gray-300"
-                }`}
-              />
-              <h2 className="font-semibold text-primary">{selectedUser.username}</h2>
-              {typingUsers?.has(selectedUser.id) && (
-                <span className="text-xs italic text-muted-foreground">
-                  typing...
-                </span>
-              )}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div
+                  className={`w-2 h-2 rounded-full ${
+                    selectedUser.isOnline ? "bg-emerald-500" : "bg-gray-300"
+                  }`}
+                />
+                <h2 className="font-semibold text-primary">{selectedUser.username}</h2>
+                {typingUsers?.has(selectedUser.id) && (
+                  <span className="text-xs italic text-muted-foreground">
+                    typing...
+                  </span>
+                )}
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm"
+                className="text-xs text-destructive border-destructive hover:bg-destructive/10"
+                onClick={() => {
+                  if (window.confirm("Are you sure you want to delete all messages? This action cannot be undone.")) {
+                    deleteChatHistory.mutate(selectedUser.id);
+                  }
+                }}
+              >
+                Clear Chat
+              </Button>
             </div>
           </div>
           <MessageList 

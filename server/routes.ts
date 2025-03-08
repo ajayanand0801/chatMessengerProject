@@ -80,6 +80,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     res.json(messages);
   });
+  
+  // Delete chat history between two users
+  app.delete("/api/messages/:userId", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    try {
+      const currentUserId = req.user!.id;
+      const otherUserId = parseInt(req.params.userId);
+      
+      // Get all messages between the two users
+      const messagesToDelete = await storage.getMessages(currentUserId, otherUserId);
+      
+      // Delete attachments associated with messages
+      for (const message of messagesToDelete) {
+        if (message.attachmentUrl) {
+          deleteFile(message.attachmentUrl);
+        }
+      }
+      
+      // Delete all messages in the conversation
+      await storage.deleteChatHistory(currentUserId, otherUserId);
+      
+      res.sendStatus(200);
+    } catch (error) {
+      console.error("Error deleting chat history:", error);
+      res.status(500).json({ error: "Failed to delete chat history" });
+    }
+  });
 
   // File upload endpoint for both attachments and profile images
   app.post("/api/upload", upload.single('file'), (req, res) => {

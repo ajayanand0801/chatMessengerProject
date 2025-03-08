@@ -132,6 +132,39 @@ export function useChat() {
       });
     },
   });
+  
+  const deleteChatHistory = useMutation({
+    mutationFn: async (userId: number) => {
+      const response = await fetch(`/api/messages/${userId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to delete chat history');
+      }
+      
+      // Invalidate queries to refresh UI
+      queryClient.invalidateQueries({ queryKey: [`/api/messages/${userId}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Chat history deleted",
+        description: "All messages have been deleted successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to delete chat history",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
 
   const getMessages = (userId: number) => {
     return useQuery<Message[]>({
@@ -145,6 +178,7 @@ export function useChat() {
     sendMessage,
     editMessage,
     deleteMessage,
+    deleteChatHistory,
     getMessages,
     typingUsers,
     sendTypingStatus,
