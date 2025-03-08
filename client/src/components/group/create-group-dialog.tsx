@@ -1,267 +1,167 @@
-
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { User } from "@shared/schema";
-import { Check, X, Users, Upload } from "lucide-react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
+import { Loader2 } from "lucide-react";
 
 interface CreateGroupDialogProps {
-  users: User[];
+  users: any[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
 export function CreateGroupDialog({ users, open, onOpenChange }: CreateGroupDialogProps) {
-  const [groupName, setGroupName] = useState("");
-  const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [groupImage, setGroupImage] = useState<string | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [name, setName] = useState("");
+  const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const filteredUsers = users.filter(user => 
-    user.username.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const toggleUserSelection = (userId: number) => {
-    if (selectedUsers.includes(userId)) {
-      setSelectedUsers(selectedUsers.filter(id => id !== userId));
-    } else {
-      setSelectedUsers([...selectedUsers, userId]);
-    }
-  };
-
-  const createGroup = useMutation({
-    mutationFn: async () => {
+  const createGroupMutation = useMutation({
+    mutationFn: async (data: { name: string; members: number[] }) => {
       const response = await fetch("/api/groups", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          name: groupName,
-          members: selectedUsers,
-          profileImage: groupImage,
-        }),
+        body: JSON.stringify(data),
       });
-      
+
       if (!response.ok) {
-        throw new Error("Failed to create group");
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to create group");
       }
-      
-      return await response.json();
+
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/groups"] });
       toast({
         title: "Group created",
-        description: `${groupName} has been created successfully.`,
+        description: "Your new group has been created successfully.",
       });
-      handleClose();
+      resetForm();
+      onOpenChange(false);
     },
-    onError: (error) => {
+    onError: (error: Error) => {
+      console.error("Error creating group:", error);
       toast({
-        title: "Error",
-        description: `Failed to create group: ${error.message}`,
+        title: "Error creating group",
+        description: error.message || "Something went wrong. Please try again.",
         variant: "destructive",
       });
     },
   });
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const formData = new FormData();
-    formData.append("file", file);
-
-    try {
-      const response = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to upload file");
-      }
-
-      const data = await response.json();
-      setGroupImage(data.url);
-    } catch (error) {
-      console.error("Error uploading file:", error);
-      toast({
-        title: "Error",
-        description: "Failed to upload image",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleClose = () => {
-    setGroupName("");
+  const resetForm = () => {
+    setName("");
     setSelectedUsers([]);
-    setSearchQuery("");
-    setGroupImage(null);
-    onOpenChange(false);
+    setIsLoading(false);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!groupName.trim()) {
+    if (!name) {
       toast({
-        title: "Error",
-        description: "Please enter a group name",
+        title: "Group name required",
+        description: "Please enter a name for the group.",
         variant: "destructive",
       });
       return;
     }
-    
-    if (selectedUsers.length === 0) {
-      toast({
-        title: "Error",
-        description: "Please select at least one user",
-        variant: "destructive",
+
+    setIsLoading(true);
+    try {
+      await createGroupMutation.mutateAsync({
+        name,
+        members: selectedUsers,
       });
-      return;
+    } catch (error) {
+      // Error is handled by the mutation
+    } finally {
+      setIsLoading(false);
     }
-    
-    createGroup.mutate();
+  };
+
+  const toggleUser = (userId: number) => {
+    setSelectedUsers((prev) =>
+      prev.includes(userId)
+        ? prev.filter((id) => id !== userId)
+        : [...prev, userId]
+    );
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
-        <form onSubmit={handleSubmit}>
-          <DialogHeader>
-            <DialogTitle>Create New Group</DialogTitle>
-            <DialogDescription>
-              Create a group chat with multiple users
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="group-image" className="text-right">
-                Image
-              </Label>
-              <div className="col-span-3 flex items-center gap-4">
-                <Avatar className="h-12 w-12">
-                  {groupImage ? (
-                    <AvatarImage src={groupImage} alt="Group image" />
-                  ) : (
-                    <AvatarFallback>
-                      <Users className="h-6 w-6" />
-                    </AvatarFallback>
-                  )}
-                </Avatar>
-                <div className="relative">
-                  <Input
-                    id="group-image"
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleFileUpload}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="flex items-center gap-2"
-                    onClick={() => document.getElementById("group-image")?.click()}
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Create New Group</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="name">Group Name</Label>
+            <Input
+              id="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Enter group name"
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Select Members</Label>
+            <div className="max-h-60 overflow-y-auto space-y-2 border rounded-md p-2">
+              {users.length === 0 ? (
+                <div className="text-sm text-muted-foreground p-2 text-center">
+                  No users available
+                </div>
+              ) : (
+                users.map((user) => (
+                  <div
+                    key={user.id}
+                    className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md"
                   >
-                    <Upload className="h-4 w-4" />
-                    Upload
-                  </Button>
-                </div>
-              </div>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="group-name" className="text-right">
-                Name
-              </Label>
-              <Input
-                id="group-name"
-                value={groupName}
-                onChange={(e) => setGroupName(e.target.value)}
-                className="col-span-3"
-                placeholder="Enter group name"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-start gap-4">
-              <Label htmlFor="search-users" className="text-right pt-2">
-                Members
-              </Label>
-              <div className="col-span-3 space-y-4">
-                <Input
-                  id="search-users"
-                  placeholder="Search users"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-                <div className="h-[180px] overflow-y-auto border rounded-md p-2 space-y-2">
-                  {filteredUsers.length === 0 ? (
-                    <div className="text-center text-muted-foreground py-4">
-                      No users found
-                    </div>
-                  ) : (
-                    filteredUsers.map((user) => (
-                      <div
-                        key={user.id}
-                        className="flex items-center justify-between p-2 hover:bg-accent rounded-md cursor-pointer"
-                        onClick={() => toggleUserSelection(user.id)}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Avatar className="h-8 w-8">
-                            {user.profileImage ? (
-                              <AvatarImage src={user.profileImage} alt={user.username} />
-                            ) : (
-                              <AvatarFallback>{user.username[0].toUpperCase()}</AvatarFallback>
-                            )}
-                          </Avatar>
-                          <span>{user.username}</span>
-                        </div>
-                        {selectedUsers.includes(user.id) ? (
-                          <Check className="h-5 w-5 text-primary" />
+                    <Checkbox
+                      id={`user-${user.id}`}
+                      checked={selectedUsers.includes(user.id)}
+                      onCheckedChange={() => toggleUser(user.id)}
+                    />
+                    <Label
+                      htmlFor={`user-${user.id}`}
+                      className="flex items-center gap-2 cursor-pointer"
+                    >
+                      <Avatar className="h-8 w-8">
+                        {user.profileImage ? (
+                          <AvatarImage src={user.profileImage} alt={user.username} />
                         ) : (
-                          <div className="h-5 w-5 rounded-full border-2 border-muted-foreground" />
+                          <AvatarFallback>{user.username.charAt(0).toUpperCase()}</AvatarFallback>
                         )}
-                      </div>
-                    ))
-                  )}
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  {selectedUsers.length} users selected
-                </div>
-              </div>
+                      </Avatar>
+                      <span>{user.username}</span>
+                    </Label>
+                  </div>
+                ))
+              )}
             </div>
           </div>
           <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleClose}
-              disabled={createGroup.isPending}
-            >
+            <Button variant="outline" type="button" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button
-              type="submit"
-              disabled={createGroup.isPending || !groupName.trim() || selectedUsers.length === 0}
-            >
-              {createGroup.isPending ? "Creating..." : "Create Group"}
+            <Button type="submit" disabled={isLoading}>
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                "Create Group"
+              )}
             </Button>
           </DialogFooter>
         </form>
