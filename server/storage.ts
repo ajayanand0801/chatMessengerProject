@@ -157,43 +157,47 @@ export const storage = {
 
   // Group chat functions
   async createGroup(userId: number, group: { name: string, members: number[], profileImage?: string }) {
-    const result = await db.transaction(async (tx) => {
-      // Create the group
-      const newGroup = await tx
-        .insert(groups)
-        .values({
-          name: group.name,
-          createdBy: userId,
-          profileImage: group.profileImage
-        })
-        .returning();
+    try {
+      const result = await db.transaction(async (tx) => {
+        const newGroup = await tx
+          .insert(groups)
+          .values({
+            name: group.name,
+            createdBy: userId,
+            profileImage: group.profileImage
+          })
+          .returning();
 
-      // Add the creator as admin
-      await tx
-        .insert(groupMembers)
-        .values({
-          groupId: newGroup[0].id,
-          userId: userId,
-          isAdmin: true
-        });
-
-      // Add other members
-      if (group.members.length > 0) {
-        const memberValues = group.members.map(memberId => ({
-          groupId: newGroup[0].id,
-          userId: memberId,
-          isAdmin: false
-        }));
-
+        // Add the creator as admin
         await tx
           .insert(groupMembers)
-          .values(memberValues);
-      }
+          .values({
+            groupId: newGroup[0].id,
+            userId: userId,
+            isAdmin: true
+          });
 
-      return newGroup[0];
-    });
+        // Add other members
+        if (group.members && group.members.length > 0) {
+          const memberValues = group.members.map(memberId => ({
+            groupId: newGroup[0].id,
+            userId: memberId,
+            isAdmin: false
+          }));
 
-    return result;
+          await tx
+            .insert(groupMembers)
+            .values(memberValues);
+        }
+
+        return newGroup[0];
+      });
+
+      return result;
+    } catch (error) {
+      console.error("Error creating group:", error);
+      throw error;
+    }
   },
 
   async getGroupById(groupId: number) {
