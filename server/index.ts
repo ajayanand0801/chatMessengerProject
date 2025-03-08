@@ -56,8 +56,8 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
-  // Use port 3000 to avoid conflicts
-  const port = 3000;
+  // Use port 5050 to avoid conflicts
+  const port = 5050;
   server.listen({
     port,
     host: "0.0.0.0",

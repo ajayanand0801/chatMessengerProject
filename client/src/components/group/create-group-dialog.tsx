@@ -22,29 +22,35 @@ export function CreateGroupDialog({ users, open, onOpenChange }: CreateGroupDial
   const queryClient = useQueryClient();
 
   const createGroup = useMutation({
-    mutationFn: async ({ name, members }: { name: string; members: number[] }) => {
-      console.log("Creating group:", { name, members });
+    mutationFn: async (data: { name: string; members: number[]; profileImage?: string }) => {
+      try {
+        // Ensure members is an array even if empty
+        const members = Array.isArray(data.members) ? data.members : [];
 
-      const res = await fetch("/api/groups", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ 
-          name, 
-          members: Array.isArray(members) ? members : [] 
-        }),
-      });
+        const res = await fetch("/api/groups", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: data.name,
+            members: members,
+            profileImage: data.profileImage,
+          }),
+        });
 
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        console.error("Server response:", errorData);
-        throw new Error(errorData.message || 'Failed to create group');
+        // Check for response before trying to parse
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          console.error("Server response:", errorData);
+          throw new Error(errorData.message || "Failed to create group");
+        }
+
+        const responseData = await res.json();
+        console.log("Group created successfully:", responseData);
+        return responseData;
+      } catch (error) {
+        console.error("Error creating group:", error);
+        throw error;
       }
-
-      const data = await res.json();
-      console.log("Group created successfully:", data);
-      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/groups"] });
@@ -146,7 +152,7 @@ export function CreateGroupDialog({ users, open, onOpenChange }: CreateGroupDial
             <Button variant="outline" type="button" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" >
+            <Button type="submit">
               Create Group
             </Button>
           </DialogFooter>
