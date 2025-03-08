@@ -4,7 +4,7 @@ import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { setupAuth } from "./auth";
 import { storage } from "./storage";
-import { insertMessageSchema } from "@shared/schema";
+import { insertMessageSchema, insertGroupSchema, insertGroupMessageSchema } from "@shared/schema";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -108,6 +108,131 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Group chat API endpoints
+  app.post("/api/groups", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    try {
+      const groupData = insertGroupSchema.parse(req.body);
+      const group = await storage.createGroup(req.user!.id, groupData);
+      res.status(201).json(group);
+    } catch (error) {
+      console.error("Error creating group:", error);
+      res.status(400).json({ error: "Failed to create group" });
+    }
+  });
+
+  app.get("/api/groups", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    try {
+      const groups = await storage.getUserGroups(req.user!.id);
+      res.json(groups);
+    } catch (error) {
+      console.error("Error fetching groups:", error);
+      res.status(500).json({ error: "Failed to fetch groups" });
+    }
+  });
+
+  app.get("/api/groups/:groupId", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    try {
+      const groupId = parseInt(req.params.groupId);
+      
+      // Check if user is a member of the group
+      const isMember = await storage.isUserInGroup(req.user!.id, groupId);
+      if (!isMember) {
+        return res.status(403).json({ error: "You are not a member of this group" });
+      }
+      
+      const group = await storage.getGroupById(groupId);
+      if (!group) {
+        return res.status(404).json({ error: "Group not found" });
+      }
+      
+      res.json(group);
+    } catch (error) {
+      console.error("Error fetching group:", error);
+      res.status(500).json({ error: "Failed to fetch group" });
+    }
+  });
+
+  app.get("/api/groups/:groupId/members", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    try {
+      const groupId = parseInt(req.params.groupId);
+      
+      // Check if user is a member of the group
+      const isMember = await storage.isUserInGroup(req.user!.id, groupId);
+      if (!isMember) {
+        return res.status(403).json({ error: "You are not a member of this group" });
+      }
+      
+      const members = await storage.getGroupMembers(groupId);
+      res.json(members);
+    } catch (error) {
+      console.error("Error fetching group members:", error);
+      res.status(500).json({ error: "Failed to fetch group members" });
+    }
+  });
+
+  app.post("/api/groups/:groupId/members", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    try {
+      const groupId = parseInt(req.params.groupId);
+      const { userId } = req.body;
+      
+      // Check if user is an admin of the group
+      const isAdmin = await storage.isUserGroupAdmin(req.user!.id, groupId);
+      if (!isAdmin) {
+        return res.status(403).json({ error: "You don't have permission to add members" });
+      }
+      
+      await storage.addMemberToGroup(groupId, userId);
+      res.sendStatus(201);
+    } catch (error) {
+      console.error("Error adding group member:", error);
+      res.status(500).json({ error: "Failed to add group member" });
+    }
+  });
+
+  app.delete("/api/groups/:groupId/members/:userId", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    try {
+      const groupId = parseInt(req.params.groupId);
+      const userId = parseInt(req.params.userId);
+      
+      // Check if user is an admin or removing themselves
+      const isAdmin = await storage.isUserGroupAdmin(req.user!.id, groupId);
+      if (!isAdmin && req.user!.id !== userId) {
+        return res.status(403).json({ error: "You don't have permission to remove this member" });
+      }
+      
+      await storage.removeMemberFromGroup(groupId, userId);
+      res.sendStatus(200);
+    } catch (error) {
+      console.error("Error removing group member:", error);
+      res.status(500).json({ error: "Failed to remove group member" });
+    }
+  });
+
+  app.get("/api/groups/:groupId/messages", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    try {
+      const groupId = parseInt(req.params.groupId);
+      
+      // Check if user is a member of the group
+      const isMember = await storage.isUserInGroup(req.user!.id, groupId);
+      if (!isMember) {
+        return res.status(403).json({ error: "You are not a member of this group" });
+      }
+      
+      const messages = await storage.getGroupMessages(groupId);
+      res.json(messages);
+    } catch (error) {
+      console.error("Error fetching group messages:", error);
+      res.status(500).json({ error: "Failed to fetch group messages" });
+    }
+  });
+
   // File upload endpoint for both attachments and profile images
   app.post("/api/upload", upload.single('file'), (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
@@ -198,6 +323,152 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ws.send(JSON.stringify({
             type: "messageDelete",
             data: { messageId: message.data.messageId }
+          }));
+        }
+
+        // Group chat websocket handlers
+        if (message.type === "groupChat") {
+          const validatedMessage = insertGroupMessageSchema.parse(message.data);
+          
+          // Check if user is member of the group
+          const isMember = await storage.isUserInGroup(ws.userId, validatedMessage.groupId);
+          if (!isMember) {
+            ws.send(JSON.stringify({ 
+              type: "error", 
+              data: { message: "You are not a member of this group" } 
+            }));
+            return;
+          }
+          
+          const savedMessage = await storage.createGroupMessage(ws.userId, validatedMessage);
+          
+          // Get all group members
+          const groupMembers = await storage.getGroupMembers(validatedMessage.groupId);
+          
+          // Send message to all online group members
+          for (const member of groupMembers) {
+            if (member.id !== ws.userId) {
+              const memberWs = clients.get(member.id);
+              if (memberWs?.readyState === WebSocket.OPEN) {
+                memberWs.send(JSON.stringify({ 
+                  type: "groupMessage", 
+                  data: { 
+                    ...savedMessage,
+                    groupId: validatedMessage.groupId,
+                    sender: {
+                      id: ws.userId,
+                      username: (await storage.getUserById(ws.userId)).username
+                    }
+                  } 
+                }));
+              }
+            }
+          }
+          
+          ws.send(JSON.stringify({ 
+            type: "groupMessage", 
+            data: { 
+              ...savedMessage,
+              groupId: validatedMessage.groupId,
+              sender: {
+                id: ws.userId,
+                username: (await storage.getUserById(ws.userId)).username
+              }
+            } 
+          }));
+        }
+
+        if (message.type === "groupTyping") {
+          // Check if user is member of the group
+          const isMember = await storage.isUserInGroup(ws.userId, message.data.groupId);
+          if (!isMember) {
+            return;
+          }
+          
+          // Get all group members
+          const groupMembers = await storage.getGroupMembers(message.data.groupId);
+          
+          // Send typing status to all online group members
+          for (const member of groupMembers) {
+            if (member.id !== ws.userId) {
+              const memberWs = clients.get(member.id);
+              if (memberWs?.readyState === WebSocket.OPEN) {
+                memberWs.send(JSON.stringify({
+                  type: "groupTyping",
+                  data: { 
+                    userId: ws.userId, 
+                    groupId: message.data.groupId,
+                    isTyping: message.data.isTyping 
+                  }
+                }));
+              }
+            }
+          }
+        }
+
+        if (message.type === "groupEditMessage") {
+          const updatedMessage = await storage.editGroupMessage(
+            message.data.messageId,
+            message.data.content
+          );
+          
+          // Get the group ID and check if user is a member
+          const groupId = updatedMessage.groupId;
+          const isMember = await storage.isUserInGroup(ws.userId, groupId);
+          if (!isMember) {
+            return;
+          }
+          
+          // Get all group members
+          const groupMembers = await storage.getGroupMembers(groupId);
+          
+          // Send updated message to all online group members
+          for (const member of groupMembers) {
+            if (member.id !== ws.userId) {
+              const memberWs = clients.get(member.id);
+              if (memberWs?.readyState === WebSocket.OPEN) {
+                memberWs.send(JSON.stringify({ 
+                  type: "groupMessageEdit", 
+                  data: updatedMessage 
+                }));
+              }
+            }
+          }
+          
+          ws.send(JSON.stringify({ type: "groupMessageEdit", data: updatedMessage }));
+        }
+
+        if (message.type === "groupDeleteMessage") {
+          // Check if message exists and belongs to user or user is admin
+          const isAdmin = await storage.isUserGroupAdmin(ws.userId, message.data.groupId);
+          
+          await storage.deleteGroupMessage(message.data.messageId);
+          
+          // Get all group members
+          const groupMembers = await storage.getGroupMembers(message.data.groupId);
+          
+          // Send delete notification to all online group members
+          for (const member of groupMembers) {
+            if (member.id !== ws.userId) {
+              const memberWs = clients.get(member.id);
+              if (memberWs?.readyState === WebSocket.OPEN) {
+                memberWs.send(JSON.stringify({
+                  type: "groupMessageDelete",
+                  data: { 
+                    messageId: message.data.messageId,
+                    groupId: message.data.groupId
+                  }
+                }));
+              }
+            }
+          }
+          
+          ws.send(JSON.stringify({
+            type: "groupMessageDelete",
+            data: { 
+              messageId: message.data.messageId,
+              groupId: message.data.groupId
+            }
           }));
         }
       } catch (error) {
