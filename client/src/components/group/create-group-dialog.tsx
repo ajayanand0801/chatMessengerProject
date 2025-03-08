@@ -36,13 +36,14 @@ export function CreateGroupDialog({ users, open, onOpenChange }: CreateGroupDial
         }),
       });
 
-      const data = await res.json();
-
       if (!res.ok) {
-        console.error("Group creation failed:", data);
-        throw new Error(data.message || data.error || "Failed to create group");
+        const errorData = await res.json().catch(() => ({}));
+        console.error("Server response:", errorData);
+        throw new Error(errorData.message || 'Failed to create group');
       }
 
+      const data = await res.json();
+      console.log("Group created successfully:", data);
       return data;
     },
     onSuccess: () => {
