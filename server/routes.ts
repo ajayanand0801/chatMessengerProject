@@ -22,7 +22,7 @@ const upload = multer({
     }
   }),
   limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB limit
+    fileSize: 10 * 1024 * 1024 // 10MB limit
   }
 });
 
@@ -65,12 +65,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(messages);
   });
 
-  // File upload endpoint
+  // File upload endpoint for both attachments and profile images
   app.post("/api/upload", upload.single('file'), (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     if (!req.file) return res.status(400).json({ message: "No file uploaded" });
 
     const fileUrl = `/uploads/${req.file.filename}`;
+    res.json({ url: fileUrl });
+  });
+
+  // Update profile image
+  app.post("/api/profile-image", upload.single('file'), async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+
+    const fileUrl = `/uploads/${req.file.filename}`;
+    await storage.updateProfileImage(req.user!.id, fileUrl);
     res.json({ url: fileUrl });
   });
 

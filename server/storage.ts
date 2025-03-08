@@ -21,6 +21,7 @@ export interface IStorage {
   editMessage(messageId: number, newContent: string): Promise<Message>;
   getUnreadMessageCount(userId: number): Promise<Record<number, number>>;
   sessionStore: session.Store;
+  updateProfileImage(userId: number, imageUrl: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -160,7 +161,7 @@ export class DatabaseStorage implements IStorage {
     try {
       const [updatedMessage] = await db
         .update(messages)
-        .set({ 
+        .set({
           content: newContent,
           lastEditedAt: new Date()
         })
@@ -197,6 +198,18 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error('Error getting unread message count:', error);
       throw new Error('Failed to get unread message count');
+    }
+  }
+
+  async updateProfileImage(userId: number, imageUrl: string): Promise<void> {
+    try {
+      await db
+        .update(users)
+        .set({ profileImage: imageUrl })
+        .where(eq(users.id, userId));
+    } catch (error) {
+      console.error('Error updating profile image:', error);
+      throw new Error('Failed to update profile image');
     }
   }
 }

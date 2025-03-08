@@ -9,6 +9,20 @@ import { Pencil, Trash2, Check, X, FileIcon, Image, Film, FileAudio, FileText } 
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 
+const ImagePreview = ({ url }: { url: string }) => {
+  return (
+    <div className="mt-2 rounded-lg overflow-hidden">
+      <img 
+        src={url} 
+        alt="Attachment" 
+        className="max-w-sm max-h-64 object-contain"
+        onClick={() => window.open(url, '_blank')}
+        style={{ cursor: 'pointer' }}
+      />
+    </div>
+  );
+};
+
 export function MessageList({
   messages,
   selectedUser,
@@ -102,20 +116,26 @@ export function MessageList({
                     <>
                       <p className="text-sm break-words">{message.content}</p>
                       {message.attachmentUrl && (
-                        <div className="mt-2 flex items-center gap-2">
-                          {getFileIcon(message.attachmentUrl)}
-                          <a 
-                            href={message.attachmentUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={cn(
-                              "text-xs underline hover:no-underline",
-                              isOwnMessage ? "text-primary-foreground/90" : "text-primary"
-                            )}
-                          >
-                            {getFileName(message.attachmentUrl)}
-                          </a>
-                        </div>
+                        <>
+                          {['jpg', 'jpeg', 'png', 'gif'].includes(message.attachmentUrl.split('.').pop()?.toLowerCase() || '') ? (
+                            <ImagePreview url={message.attachmentUrl} />
+                          ) : (
+                            <div className="mt-2 flex items-center gap-2">
+                              {getFileIcon(message.attachmentUrl)}
+                              <a 
+                                href={message.attachmentUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={cn(
+                                  "text-xs underline hover:no-underline",
+                                  isOwnMessage ? "text-primary-foreground/90" : "text-primary"
+                                )}
+                              >
+                                {getFileName(message.attachmentUrl)}
+                              </a>
+                            </div>
+                          )}
+                        </>
                       )}
                     </>
                   )}

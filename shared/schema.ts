@@ -7,6 +7,7 @@ export const users = pgTable("users", {
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
   isOnline: boolean("is_online").notNull().default(false),
+  profileImage: text("profile_image"),
 });
 
 export const messages = pgTable("messages", {

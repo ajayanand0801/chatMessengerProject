@@ -4,6 +4,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { ProfileImage } from "@/components/profile/profile-image";
 
 export function UserList({
   users,
@@ -29,19 +30,16 @@ export function UserList({
               })}
               onClick={() => onSelectUser(user)}
             >
-              <div className="flex items-center gap-2 w-full">
-                <div
-                  className={cn("w-2 h-2 rounded-full", {
-                    "bg-emerald-500 animate-pulse": user.isOnline,
-                    "bg-gray-300": !user.isOnline,
-                  })}
-                />
-                <span className="flex-1 truncate">{user.username}</span>
-                {typingUsers?.has(user.id) && (
-                  <span className="text-xs italic text-muted-foreground">
-                    typing...
-                  </span>
-                )}
+              <div className="flex items-center gap-3 w-full">
+                <ProfileImage user={user} size="sm" />
+                <div className="flex-1 min-w-0">
+                  <span className="truncate">{user.username}</span>
+                  {typingUsers?.has(user.id) && (
+                    <span className="text-xs italic text-muted-foreground block">
+                      typing...
+                    </span>
+                  )}
+                </div>
                 {user.unreadCount && user.unreadCount > 0 && (
                   <Badge 
                     variant="destructive" 

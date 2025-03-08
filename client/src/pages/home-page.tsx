@@ -7,6 +7,7 @@ import { UserList } from "@/components/chat/user-list";
 import { MessageList } from "@/components/chat/message-list";
 import { MessageInput } from "@/components/chat/message-input";
 import { LogOut } from "lucide-react";
+import { ProfileImage } from "@/components/profile/profile-image";
 
 export default function HomePage() {
   const { user, logoutMutation } = useAuth();
@@ -50,9 +51,15 @@ export default function HomePage() {
     <div className="min-h-screen flex bg-gradient-to-br from-primary/5 to-primary/10">
       <div className="flex flex-col">
         <div className="p-4 bg-white/50 backdrop-blur-sm border-b flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <h1 className="font-semibold text-primary">{user?.username}</h1>
+          <div className="flex items-center gap-3">
+            <ProfileImage user={user!} showUpload size="md" />
+            <div className="flex flex-col">
+              <h1 className="font-semibold text-primary">{user?.username}</h1>
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-xs text-muted-foreground">Online</span>
+              </div>
+            </div>
           </div>
           <Button
             variant="ghost"
