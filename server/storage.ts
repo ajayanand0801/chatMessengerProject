@@ -158,15 +158,20 @@ export const storage = {
   // Group chat functions
   async createGroup(userId: number, group: { name: string, members: number[], profileImage?: string }) {
     try {
+      console.log("Creating group with data:", { userId, name: group.name, members: group.members });
+      
       const result = await db.transaction(async (tx) => {
+        // Create the group
         const newGroup = await tx
           .insert(groups)
           .values({
             name: group.name,
             createdBy: userId,
-            profileImage: group.profileImage
+            profileImage: group.profileImage || null
           })
           .returning();
+        
+        console.log("Group created:", newGroup[0]);
 
         // Add the creator as admin
         await tx
@@ -176,9 +181,12 @@ export const storage = {
             userId: userId,
             isAdmin: true
           });
+        
+        console.log("Added creator as admin");
 
-        // Add other members
+        // Add other members if present
         if (group.members && group.members.length > 0) {
+          console.log("Adding members:", group.members);
           const memberValues = group.members.map(memberId => ({
             groupId: newGroup[0].id,
             userId: memberId,
@@ -193,6 +201,7 @@ export const storage = {
         return newGroup[0];
       });
 
+      console.log("Group creation completed successfully:", result);
       return result;
     } catch (error) {
       console.error("Error creating group:", error);
