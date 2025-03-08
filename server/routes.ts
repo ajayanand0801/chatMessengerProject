@@ -1,12 +1,34 @@
 import type { Express } from "express";
+import express from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { setupAuth } from "./auth";
 import { storage } from "./storage";
 import { insertMessageSchema } from "@shared/schema";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
 
 interface WebSocketWithId extends WebSocket {
   userId?: number;
+}
+
+// Configure multer for file uploads
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: './uploads/',
+    filename: function (req, file, cb) {
+      cb(null, Date.now() + path.extname(file.originalname));
+    }
+  }),
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  }
+});
+
+// Create uploads directory if it doesn't exist
+if (!fs.existsSync('./uploads')) {
+  fs.mkdirSync('./uploads');
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -14,7 +36,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const httpServer = createServer(app);
   const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
-
   const clients = new Map<number, WebSocketWithId>();
 
   app.get("/api/users", async (req, res) => {
@@ -43,6 +64,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     res.json(messages);
   });
+
+  // File upload endpoint
+  app.post("/api/upload", upload.single('file'), (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+
+    const fileUrl = `/uploads/${req.file.filename}`;
+    res.json({ url: fileUrl });
+  });
+
+  // Serve uploaded files
+  app.use('/uploads', express.static('uploads'));
 
   wss.on("connection", (ws: WebSocketWithId) => {
     ws.on("message", async (data: string) => {

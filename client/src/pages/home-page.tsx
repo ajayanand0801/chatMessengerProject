@@ -15,11 +15,12 @@ export default function HomePage() {
 
   const { data: messages = [] } = getMessages(selectedUser?.id ?? 0);
 
-  const handleSendMessage = (content: string) => {
+  const handleSendMessage = (content: string, attachmentUrl?: string) => {
     if (!selectedUser) return;
     sendMessage.mutate({
       content,
       receiverId: selectedUser.id,
+      attachmentUrl,
     });
   };
 
