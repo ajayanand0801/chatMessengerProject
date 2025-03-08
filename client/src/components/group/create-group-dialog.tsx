@@ -16,76 +16,68 @@ interface CreateGroupDialogProps {
 }
 
 export function CreateGroupDialog({ users, open, onOpenChange }: CreateGroupDialogProps) {
+  const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
+  const [groupName, setGroupName] = useState("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [name, setName] = useState("");
-  const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
 
-  const createGroupMutation = useMutation({
-    mutationFn: async (data: { name: string; members: number[] }) => {
-      const response = await fetch("/api/groups", {
+  const createGroup = useMutation({
+    mutationFn: async ({ name, members }: { name: string; members: number[] }) => {
+      console.log("Creating group:", { name, members });
+
+      const res = await fetch("/api/groups", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ 
+          name, 
+          members: Array.isArray(members) ? members : [] 
+        }),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to create group");
+      const data = await res.json();
+
+      if (!res.ok) {
+        console.error("Group creation failed:", data);
+        throw new Error(data.message || data.error || "Failed to create group");
       }
 
-      return response.json();
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/groups"] });
       toast({
-        title: "Group created",
+        title: "Group created!",
         description: "Your new group has been created successfully.",
       });
-      resetForm();
       onOpenChange(false);
+      setSelectedUsers([]);
+      setGroupName("");
     },
-    onError: (error: Error) => {
-      console.error("Error creating group:", error);
+    onError: (error: any) => {
+      console.error("Group creation error:", error);
       toast({
-        title: "Error creating group",
-        description: error.message || "Something went wrong. Please try again.",
+        title: "Failed to create group",
+        description: error.message || "An error occurred while creating the group.",
         variant: "destructive",
       });
     },
   });
 
-  const resetForm = () => {
-    setName("");
-    setSelectedUsers([]);
-    setIsLoading(false);
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name) {
+    if (!groupName) {
       toast({
         title: "Group name required",
-        description: "Please enter a name for the group.",
+        description: "Please enter a name for your group.",
         variant: "destructive",
       });
       return;
     }
 
-    setIsLoading(true);
-    try {
-      await createGroupMutation.mutateAsync({
-        name,
-        members: selectedUsers,
-      });
-    } catch (error) {
-      // Error is handled by the mutation
-    } finally {
-      setIsLoading(false);
-    }
+    await createGroup.mutateAsync({ name: groupName, members: selectedUsers });
+
   };
 
   const toggleUser = (userId: number) => {
@@ -107,8 +99,8 @@ export function CreateGroupDialog({ users, open, onOpenChange }: CreateGroupDial
             <Label htmlFor="name">Group Name</Label>
             <Input
               id="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              value={groupName}
+              onChange={(e) => setGroupName(e.target.value)}
               placeholder="Enter group name"
               required
             />
@@ -153,15 +145,8 @@ export function CreateGroupDialog({ users, open, onOpenChange }: CreateGroupDial
             <Button variant="outline" type="button" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isLoading}>
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                "Create Group"
-              )}
+            <Button type="submit" >
+              Create Group
             </Button>
           </DialogFooter>
         </form>

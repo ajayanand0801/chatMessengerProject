@@ -158,10 +158,19 @@ export const storage = {
   // Group chat functions
   async createGroup(userId: number, group: { name: string, members: number[], profileImage?: string }) {
     try {
-      console.log("Creating group with data:", { userId, name: group.name, members: group.members });
+      console.log("Creating group with data:", JSON.stringify({ userId, name: group.name, members: group.members }));
+      
+      // Validate input
+      if (!group.name || typeof group.name !== 'string') {
+        throw new Error("Group name is required and must be a string");
+      }
+      
+      // Ensure members is an array (even if empty)
+      const members = Array.isArray(group.members) ? group.members : [];
       
       const result = await db.transaction(async (tx) => {
         // Create the group
+        console.log("Inserting new group");
         const newGroup = await tx
           .insert(groups)
           .values({
@@ -171,9 +180,14 @@ export const storage = {
           })
           .returning();
         
-        console.log("Group created:", newGroup[0]);
+        if (!newGroup || !newGroup[0] || !newGroup[0].id) {
+          throw new Error("Failed to create group, no ID returned");
+        }
+        
+        console.log("Group created with ID:", newGroup[0].id);
 
         // Add the creator as admin
+        console.log("Adding creator as admin");
         await tx
           .insert(groupMembers)
           .values({
@@ -182,12 +196,10 @@ export const storage = {
             isAdmin: true
           });
         
-        console.log("Added creator as admin");
-
         // Add other members if present
-        if (group.members && group.members.length > 0) {
-          console.log("Adding members:", group.members);
-          const memberValues = group.members.map(memberId => ({
+        if (members.length > 0) {
+          console.log("Adding members:", members);
+          const memberValues = members.map(memberId => ({
             groupId: newGroup[0].id,
             userId: memberId,
             isAdmin: false
@@ -196,12 +208,14 @@ export const storage = {
           await tx
             .insert(groupMembers)
             .values(memberValues);
+        } else {
+          console.log("No additional members to add");
         }
 
         return newGroup[0];
       });
 
-      console.log("Group creation completed successfully:", result);
+      console.log("Group creation completed successfully:", JSON.stringify(result));
       return result;
     } catch (error) {
       console.error("Error creating group:", error);
