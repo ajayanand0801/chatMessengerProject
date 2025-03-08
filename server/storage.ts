@@ -1,7 +1,7 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { messages, users, groups, groupMembers, groupMessages } from "@shared/schema";
-import { eq, and, or, desc, inArray } from "drizzle-orm";
+import { eq, and, or, desc, inArray, sql } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
 const client = postgres(process.env.DATABASE_URL || "postgres://postgres:postgres@localhost:5432/postgres");
@@ -326,9 +326,7 @@ export const storage = {
   }
 };
 
-// Import for SQL aggregate function
-import { sql } from "drizzle-orm";
-
+// Define sessionStore
 export const sessionStore = {
   async createSession(sessionId: string, data: any, expiresAt: Date) {
     // We'd use a dedicated sessions table in a real app
