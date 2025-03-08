@@ -112,12 +112,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/groups", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     try {
+      console.log("Received group creation request:", JSON.stringify(req.body));
+      
+      // Ensure members is always an array
+      if (req.body.members && !Array.isArray(req.body.members)) {
+        req.body.members = [];
+      }
+      
       const groupData = insertGroupSchema.parse(req.body);
+      console.log("Validated group data:", JSON.stringify(groupData));
+      
       const group = await storage.createGroup(req.user!.id, groupData);
+      console.log("Group created successfully:", JSON.stringify(group));
+      
       res.status(201).json(group);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating group:", error);
-      res.status(400).json({ error: "Failed to create group" });
+      
+      // Provide more specific error details
+      if (error.errors) {
+        return res.status(400).json({ 
+          error: "Validation failed", 
+          details: error.errors 
+        });
+      }
+      
+      res.status(500).json({ 
+        error: "Failed to create group", 
+        message: error.message || "Unknown error" 
+      });
     }
   });
 
