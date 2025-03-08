@@ -199,15 +199,21 @@ export const storage = {
         // Add other members if present
         if (members.length > 0) {
           console.log("Adding members:", members);
-          const memberValues = members.map(memberId => ({
-            groupId: newGroup[0].id,
-            userId: memberId,
-            isAdmin: false
-          }));
+          // Filter out duplicates and creator
+          const uniqueMembers = [...new Set(members)].filter(memberId => memberId !== userId);
+          
+          if (uniqueMembers.length > 0) {
+            const memberValues = uniqueMembers.map(memberId => ({
+              groupId: newGroup[0].id,
+              userId: memberId,
+              isAdmin: false
+            }));
 
-          await tx
-            .insert(groupMembers)
-            .values(memberValues);
+            await tx
+              .insert(groupMembers)
+              .values(memberValues)
+              .onConflictDoNothing(); // In case we still have duplicates
+          }
         } else {
           console.log("No additional members to add");
         }

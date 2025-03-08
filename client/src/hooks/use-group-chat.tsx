@@ -168,6 +168,34 @@ export function useGroupChat() {
 
   const sendGroupMessage = useMutation({
     mutationFn: async ({ content, groupId, attachmentUrl }: InsertGroupMessage) => {
+      // Wait a bit to ensure socket is available
+      if (!socket || !isConnected) {
+        // Try to wait for connection
+        const waitForConnection = (maxAttempts = 5): Promise<void> => {
+          return new Promise((resolve, reject) => {
+            let attempts = 0;
+            const checkConnection = () => {
+              attempts++;
+              if (socket && isConnected) {
+                resolve();
+              } else if (attempts >= maxAttempts) {
+                reject(new Error("WebSocket connection timeout"));
+              } else {
+                setTimeout(checkConnection, 500);
+              }
+            };
+            checkConnection();
+          });
+        };
+        
+        try {
+          await waitForConnection();
+        } catch (error) {
+          console.error("WebSocket connection failed:", error);
+          throw new Error("WebSocket not connected. Please try again later.");
+        }
+      }
+      
       if (!socket || !isConnected) {
         throw new Error("WebSocket not connected");
       }
