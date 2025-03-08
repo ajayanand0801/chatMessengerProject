@@ -4,7 +4,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { ProfileImage } from "@/components/profile/profile-image";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 export function UserList({
   users,
@@ -31,7 +31,13 @@ export function UserList({
               onClick={() => onSelectUser(user)}
             >
               <div className="flex items-center gap-3 w-full">
-                <ProfileImage user={user} size="sm" />
+                <Avatar>
+                  {user.profileImage ? (
+                    <AvatarImage src={user.profileImage} alt={user.username} />
+                  ) : (
+                    <AvatarFallback>{user.username[0].toUpperCase()}</AvatarFallback>
+                  )}
+                </Avatar>
                 <div className="flex-1 min-w-0">
                   <span className="truncate">{user.username}</span>
                   {typingUsers?.has(user.id) && (
