@@ -15,6 +15,10 @@ export const messages = pgTable("messages", {
   senderId: integer("sender_id").notNull().references(() => users.id),
   receiverId: integer("receiver_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  isRead: boolean("is_read").notNull().default(false),
+  isDeleted: boolean("is_deleted").notNull().default(false),
+  lastEditedAt: timestamp("last_edited_at"),
+  attachmentUrl: text("attachment_url"),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
@@ -25,6 +29,8 @@ export const insertUserSchema = createInsertSchema(users).pick({
 export const insertMessageSchema = createInsertSchema(messages).pick({
   content: true,
   receiverId: true,
+}).extend({
+  attachmentUrl: z.string().optional(),
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;

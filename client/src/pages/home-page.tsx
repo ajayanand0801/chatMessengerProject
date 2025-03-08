@@ -10,7 +10,7 @@ import { LogOut } from "lucide-react";
 
 export default function HomePage() {
   const { user, logoutMutation } = useAuth();
-  const { users, sendMessage, getMessages, typingUsers, sendTypingStatus } = useChat();
+  const { users, sendMessage, getMessages, typingUsers, sendTypingStatus, editMessage, deleteMessage } = useChat();
   const [selectedUser, setSelectedUser] = useState<User>();
 
   const { data: messages = [] } = getMessages(selectedUser?.id ?? 0);
@@ -26,6 +26,23 @@ export default function HomePage() {
   const handleTyping = (isTyping: boolean) => {
     if (!selectedUser) return;
     sendTypingStatus(selectedUser.id, isTyping);
+  };
+
+  const handleEditMessage = (messageId: number, content: string) => {
+    if (!selectedUser) return;
+    editMessage.mutate({
+      messageId,
+      content,
+      receiverId: selectedUser.id,
+    });
+  };
+
+  const handleDeleteMessage = (messageId: number) => {
+    if (!selectedUser) return;
+    deleteMessage.mutate({
+      messageId,
+      receiverId: selectedUser.id,
+    });
   };
 
   return (
@@ -69,7 +86,12 @@ export default function HomePage() {
               )}
             </div>
           </div>
-          <MessageList messages={messages} selectedUser={selectedUser} />
+          <MessageList 
+            messages={messages} 
+            selectedUser={selectedUser} 
+            onEditMessage={handleEditMessage}
+            onDeleteMessage={handleDeleteMessage}
+          />
           <MessageInput
             selectedUser={selectedUser}
             onSendMessage={handleSendMessage}

@@ -20,7 +20,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/users", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     const users = await storage.getAllUsers();
-    res.json(users.filter(u => u.id !== req.user!.id));
+    const unreadCounts = await storage.getUnreadMessageCount(req.user!.id);
+    res.json(users.filter(u => u.id !== req.user!.id).map(u => ({
+      ...u,
+      unreadCount: unreadCounts[u.id] || 0
+    })));
   });
 
   app.get("/api/messages/:userId", async (req, res) => {
@@ -29,6 +33,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       req.user!.id,
       parseInt(req.params.userId),
     );
+
+    // Mark received messages as read
+    for (const message of messages) {
+      if (message.receiverId === req.user!.id && !message.isRead) {
+        await storage.markMessageAsRead(message.id);
+      }
+    }
+
     res.json(messages);
   });
 
@@ -69,6 +81,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
               data: { userId: ws.userId, isTyping: message.data.isTyping }
             }));
           }
+        }
+
+        if (message.type === "edit") {
+          const updatedMessage = await storage.editMessage(
+            message.data.messageId,
+            message.data.content
+          );
+          const receiverWs = clients.get(updatedMessage.receiverId);
+          if (receiverWs?.readyState === WebSocket.OPEN) {
+            receiverWs.send(JSON.stringify({ type: "messageEdit", data: updatedMessage }));
+          }
+          ws.send(JSON.stringify({ type: "messageEdit", data: updatedMessage }));
+        }
+
+        if (message.type === "delete") {
+          await storage.deleteMessage(message.data.messageId);
+          const receiverWs = clients.get(message.data.receiverId);
+          if (receiverWs?.readyState === WebSocket.OPEN) {
+            receiverWs.send(JSON.stringify({
+              type: "messageDelete",
+              data: { messageId: message.data.messageId }
+            }));
+          }
+          ws.send(JSON.stringify({
+            type: "messageDelete",
+            data: { messageId: message.data.messageId }
+          }));
         }
       } catch (error) {
         console.error("WebSocket message error:", error);

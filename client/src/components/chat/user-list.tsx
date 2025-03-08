@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 
 export function UserList({
   users,
@@ -10,7 +11,7 @@ export function UserList({
   onSelectUser,
   typingUsers,
 }: {
-  users: User[];
+  users: (User & { unreadCount?: number })[];
   selectedUser?: User;
   onSelectUser: (user: User) => void;
   typingUsers?: Set<number>;
@@ -23,7 +24,7 @@ export function UserList({
             <Button
               key={user.id}
               variant={selectedUser?.id === user.id ? "default" : "ghost"}
-              className={cn("w-full justify-start", {
+              className={cn("w-full justify-start relative", {
                 "bg-primary text-primary-foreground": selectedUser?.id === user.id,
               })}
               onClick={() => onSelectUser(user)}
@@ -40,6 +41,14 @@ export function UserList({
                   <span className="text-xs italic text-muted-foreground">
                     typing...
                   </span>
+                )}
+                {user.unreadCount && user.unreadCount > 0 && (
+                  <Badge 
+                    variant="destructive" 
+                    className="absolute top-1 right-1"
+                  >
+                    {user.unreadCount}
+                  </Badge>
                 )}
               </div>
             </Button>

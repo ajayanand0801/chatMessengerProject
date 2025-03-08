@@ -2,7 +2,7 @@ import { User, Message, InsertUser, InsertMessage } from "@shared/schema";
 import session from "express-session";
 import { db } from "./db";
 import { users, messages } from "@shared/schema";
-import { eq, or, and } from "drizzle-orm";
+import { eq, or, and, not } from "drizzle-orm";
 import connectPg from "connect-pg-simple";
 import { pool } from "./db";
 
@@ -16,6 +16,10 @@ export interface IStorage {
   setUserOnlineStatus(userId: number, isOnline: boolean): Promise<void>;
   createMessage(senderId: number, message: InsertMessage): Promise<Message>;
   getMessages(userId1: number, userId2: number): Promise<Message[]>;
+  markMessageAsRead(messageId: number): Promise<void>;
+  deleteMessage(messageId: number): Promise<void>;
+  editMessage(messageId: number, newContent: string): Promise<Message>;
+  getUnreadMessageCount(userId: number): Promise<Record<number, number>>;
   sessionStore: session.Store;
 }
 
@@ -91,6 +95,7 @@ export class DatabaseStorage implements IStorage {
           senderId,
           content: message.content,
           receiverId: message.receiverId,
+          attachmentUrl: message.attachmentUrl, //Added from edited snippet
         })
         .returning();
       return newMessage;
@@ -106,21 +111,92 @@ export class DatabaseStorage implements IStorage {
         .select()
         .from(messages)
         .where(
-          or(
-            and(
-              eq(messages.senderId, userId1),
-              eq(messages.receiverId, userId2)
+          and(
+            or(
+              and(
+                eq(messages.senderId, userId1),
+                eq(messages.receiverId, userId2)
+              ),
+              and(
+                eq(messages.senderId, userId2),
+                eq(messages.receiverId, userId1)
+              )
             ),
-            and(
-              eq(messages.senderId, userId2),
-              eq(messages.receiverId, userId1)
-            )
+            not(eq(messages.isDeleted, true))
           )
         )
         .orderBy(messages.createdAt);
     } catch (error) {
       console.error('Error getting messages:', error);
       throw new Error('Failed to get messages');
+    }
+  }
+
+  async markMessageAsRead(messageId: number): Promise<void> {
+    try {
+      await db
+        .update(messages)
+        .set({ isRead: true })
+        .where(eq(messages.id, messageId));
+    } catch (error) {
+      console.error('Error marking message as read:', error);
+      throw new Error('Failed to mark message as read');
+    }
+  }
+
+  async deleteMessage(messageId: number): Promise<void> {
+    try {
+      await db
+        .update(messages)
+        .set({ isDeleted: true })
+        .where(eq(messages.id, messageId));
+    } catch (error) {
+      console.error('Error deleting message:', error);
+      throw new Error('Failed to delete message');
+    }
+  }
+
+  async editMessage(messageId: number, newContent: string): Promise<Message> {
+    try {
+      const [updatedMessage] = await db
+        .update(messages)
+        .set({ 
+          content: newContent,
+          lastEditedAt: new Date()
+        })
+        .where(eq(messages.id, messageId))
+        .returning();
+      return updatedMessage;
+    } catch (error) {
+      console.error('Error editing message:', error);
+      throw new Error('Failed to edit message');
+    }
+  }
+
+  async getUnreadMessageCount(userId: number): Promise<Record<number, number>> {
+    try {
+      const unreadMessages = await db
+        .select({
+          senderId: messages.senderId,
+          count: db.fn.count(messages.id)
+        })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.receiverId, userId),
+            eq(messages.isRead, false),
+            not(eq(messages.isDeleted, true))
+          )
+        )
+        .groupBy(messages.senderId);
+
+      return unreadMessages.reduce((acc, { senderId, count }) => {
+        acc[senderId] = Number(count);
+        return acc;
+      }, {} as Record<number, number>);
+    } catch (error) {
+      console.error('Error getting unread message count:', error);
+      throw new Error('Failed to get unread message count');
     }
   }
 }

@@ -12,7 +12,7 @@ export function useChat() {
   const [typingUsers, setTypingUsers] = useState<Set<number>>(new Set());
   const typingTimeoutRef = useRef<Record<number, NodeJS.Timeout>>({});
 
-  const { data: users = [] } = useQuery<User[]>({
+  const { data: users = [] } = useQuery<(User & { unreadCount?: number })[]>({
     queryKey: ["/api/users"],
     enabled: !!user,
   });
@@ -34,6 +34,7 @@ export function useChat() {
       if (message.type === "message") {
         queryClient.invalidateQueries({ queryKey: [`/api/messages/${message.data.senderId}`] });
         queryClient.invalidateQueries({ queryKey: [`/api/messages/${message.data.receiverId}`] });
+        queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       } else if (message.type === "typing") {
         const { userId, isTyping } = message.data;
         setTypingUsers((prev) => {
@@ -59,6 +60,9 @@ export function useChat() {
             });
           }, 3000);
         }
+      } else if (message.type === "messageEdit" || message.type === "messageDelete") {
+        queryClient.invalidateQueries({ queryKey: [`/api/messages/${message.data.senderId}`] });
+        queryClient.invalidateQueries({ queryKey: [`/api/messages/${message.data.receiverId}`] });
       }
     };
 
@@ -91,6 +95,44 @@ export function useChat() {
     },
   });
 
+  const editMessage = useMutation({
+    mutationFn: async ({ messageId, content, receiverId }: { messageId: number; content: string; receiverId: number }) => {
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+        throw new Error("WebSocket not connected");
+      }
+      wsRef.current.send(JSON.stringify({
+        type: "edit",
+        data: { messageId, content, receiverId }
+      }));
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to edit message",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteMessage = useMutation({
+    mutationFn: async ({ messageId, receiverId }: { messageId: number; receiverId: number }) => {
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+        throw new Error("WebSocket not connected");
+      }
+      wsRef.current.send(JSON.stringify({
+        type: "delete",
+        data: { messageId, receiverId }
+      }));
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to delete message",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const getMessages = (userId: number) => {
     return useQuery<Message[]>({
       queryKey: [`/api/messages/${userId}`],
@@ -101,6 +143,8 @@ export function useChat() {
   return {
     users,
     sendMessage,
+    editMessage,
+    deleteMessage,
     getMessages,
     typingUsers,
     sendTypingStatus,
