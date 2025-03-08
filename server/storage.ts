@@ -14,10 +14,8 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   getAllUsers(): Promise<User[]>;
   setUserOnlineStatus(userId: number, isOnline: boolean): Promise<void>;
-
   createMessage(senderId: number, message: InsertMessage): Promise<Message>;
   getMessages(userId1: number, userId2: number): Promise<Message[]>;
-
   sessionStore: session.Store;
 }
 
@@ -32,60 +30,98 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUser(id: number): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
+    try {
+      const [user] = await db.select().from(users).where(eq(users.id, id));
+      return user;
+    } catch (error) {
+      console.error('Error getting user:', error);
+      throw new Error('Failed to get user');
+    }
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.username, username));
-    return user;
+    try {
+      const [user] = await db.select().from(users).where(eq(users.username, username));
+      return user;
+    } catch (error) {
+      console.error('Error getting user by username:', error);
+      throw new Error('Failed to get user by username');
+    }
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const [user] = await db.insert(users).values(insertUser).returning();
-    return user;
+    try {
+      const [user] = await db.insert(users).values({
+        ...insertUser,
+        isOnline: false
+      }).returning();
+      return user;
+    } catch (error) {
+      console.error('Error creating user:', error);
+      throw new Error('Failed to create user');
+    }
   }
 
   async getAllUsers(): Promise<User[]> {
-    return await db.select().from(users);
+    try {
+      return await db.select().from(users);
+    } catch (error) {
+      console.error('Error getting all users:', error);
+      throw new Error('Failed to get all users');
+    }
   }
 
   async setUserOnlineStatus(userId: number, isOnline: boolean): Promise<void> {
-    await db
-      .update(users)
-      .set({ isOnline })
-      .where(eq(users.id, userId));
+    try {
+      await db
+        .update(users)
+        .set({ isOnline })
+        .where(eq(users.id, userId));
+    } catch (error) {
+      console.error('Error setting user online status:', error);
+      throw new Error('Failed to set user online status');
+    }
   }
 
   async createMessage(senderId: number, message: InsertMessage): Promise<Message> {
-    const [newMessage] = await db
-      .insert(messages)
-      .values({
-        senderId,
-        content: message.content,
-        receiverId: message.receiverId,
-      })
-      .returning();
-    return newMessage;
+    try {
+      const [newMessage] = await db
+        .insert(messages)
+        .values({
+          senderId,
+          content: message.content,
+          receiverId: message.receiverId,
+        })
+        .returning();
+      return newMessage;
+    } catch (error) {
+      console.error('Error creating message:', error);
+      throw new Error('Failed to create message');
+    }
   }
 
   async getMessages(userId1: number, userId2: number): Promise<Message[]> {
-    return await db
-      .select()
-      .from(messages)
-      .where(
-        or(
-          and(
-            eq(messages.senderId, userId1),
-            eq(messages.receiverId, userId2)
-          ),
-          and(
-            eq(messages.senderId, userId2),
-            eq(messages.receiverId, userId1)
+    try {
+      return await db
+        .select()
+        .from(messages)
+        .where(
+          or(
+            and(
+              eq(messages.senderId, userId1),
+              eq(messages.receiverId, userId2)
+            ),
+            and(
+              eq(messages.senderId, userId2),
+              eq(messages.receiverId, userId1)
+            )
           )
         )
-      )
-      .orderBy(messages.createdAt);
+        .orderBy(messages.createdAt);
+    } catch (error) {
+      console.error('Error getting messages:', error);
+      throw new Error('Failed to get messages');
+    }
   }
 }
 
