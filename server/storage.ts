@@ -15,6 +15,7 @@ export interface IStorage {
   getAllUsers(): Promise<User[]>;
   setUserOnlineStatus(userId: number, isOnline: boolean): Promise<void>;
   createMessage(senderId: number, message: InsertMessage): Promise<Message>;
+  getMessage(messageId: number): Promise<Message | undefined>;
   getMessages(userId1: number, userId2: number): Promise<Message[]>;
   markMessageAsRead(messageId: number): Promise<void>;
   deleteMessage(messageId: number): Promise<void>;
@@ -103,6 +104,19 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error('Error creating message:', error);
       throw new Error('Failed to create message');
+    }
+  }
+
+  async getMessage(messageId: number): Promise<Message | undefined> {
+    try {
+      const [message] = await db
+        .select()
+        .from(messages)
+        .where(eq(messages.id, messageId));
+      return message;
+    } catch (error) {
+      console.error('Error getting message:', error);
+      throw new Error('Failed to get message');
     }
   }
 

@@ -31,6 +31,22 @@ if (!fs.existsSync('./uploads')) {
   fs.mkdirSync('./uploads');
 }
 
+// Helper function to delete file
+const deleteFile = (filePath: string) => {
+  if (!filePath) return;
+
+  // Remove the leading '/' from the file path
+  const relativePath = filePath.startsWith('/') ? filePath.slice(1) : filePath;
+  const fullPath = path.join(__dirname, '..', relativePath);
+  if (fs.existsSync(fullPath)) {
+    try {
+      fs.unlinkSync(fullPath);
+    } catch (error) {
+      console.error('Error deleting file:', error);
+    }
+  }
+};
+
 export async function registerRoutes(app: Express): Promise<Server> {
   setupAuth(app);
 
@@ -139,6 +155,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         if (message.type === "delete") {
+          const oldMessage = await storage.getMessage(message.data.messageId);
+          if (oldMessage?.attachmentUrl) {
+            deleteFile(oldMessage.attachmentUrl);
+          }
+
           await storage.deleteMessage(message.data.messageId);
           const receiverWs = clients.get(message.data.receiverId);
           if (receiverWs?.readyState === WebSocket.OPEN) {
