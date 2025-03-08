@@ -36,10 +36,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     ws.on("message", async (data: string) => {
       try {
         const message = JSON.parse(data);
-        
+
         if (message.type === "auth") {
           ws.userId = message.userId;
           clients.set(message.userId, ws);
+          await storage.setUserOnlineStatus(message.userId, true);
           return;
         }
 
@@ -58,6 +59,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
 
           ws.send(JSON.stringify({ type: "message", data: savedMessage }));
+        }
+
+        if (message.type === "typing") {
+          const receiverWs = clients.get(message.data.receiverId);
+          if (receiverWs?.readyState === WebSocket.OPEN) {
+            receiverWs.send(JSON.stringify({
+              type: "typing",
+              data: { userId: ws.userId, isTyping: message.data.isTyping }
+            }));
+          }
         }
       } catch (error) {
         console.error("WebSocket message error:", error);

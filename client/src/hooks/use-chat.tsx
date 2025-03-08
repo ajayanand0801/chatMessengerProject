@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Message, InsertMessage, User } from "@shared/schema";
 import { useAuth } from "./use-auth";
@@ -9,6 +9,8 @@ export function useChat() {
   const { user } = useAuth();
   const { toast } = useToast();
   const wsRef = useRef<WebSocket>();
+  const [typingUsers, setTypingUsers] = useState<Set<number>>(new Set());
+  const typingTimeoutRef = useRef<Record<number, NodeJS.Timeout>>({});
 
   const { data: users = [] } = useQuery<User[]>({
     queryKey: ["/api/users"],
@@ -32,6 +34,31 @@ export function useChat() {
       if (message.type === "message") {
         queryClient.invalidateQueries({ queryKey: [`/api/messages/${message.data.senderId}`] });
         queryClient.invalidateQueries({ queryKey: [`/api/messages/${message.data.receiverId}`] });
+      } else if (message.type === "typing") {
+        const { userId, isTyping } = message.data;
+        setTypingUsers((prev) => {
+          const next = new Set(prev);
+          if (isTyping) {
+            next.add(userId);
+          } else {
+            next.delete(userId);
+          }
+          return next;
+        });
+
+        if (typingTimeoutRef.current[userId]) {
+          clearTimeout(typingTimeoutRef.current[userId]);
+        }
+
+        if (isTyping) {
+          typingTimeoutRef.current[userId] = setTimeout(() => {
+            setTypingUsers((prev) => {
+              const next = new Set(prev);
+              next.delete(userId);
+              return next;
+            });
+          }, 3000);
+        }
       }
     };
 
@@ -39,6 +66,14 @@ export function useChat() {
       ws.close();
     };
   }, [user]);
+
+  const sendTypingStatus = (receiverId: number, isTyping: boolean) => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    wsRef.current.send(JSON.stringify({
+      type: "typing",
+      data: { receiverId, isTyping }
+    }));
+  };
 
   const sendMessage = useMutation({
     mutationFn: async (message: InsertMessage) => {
@@ -59,7 +94,7 @@ export function useChat() {
   const getMessages = (userId: number) => {
     return useQuery<Message[]>({
       queryKey: [`/api/messages/${userId}`],
-      enabled: !!user,
+      enabled: !!user && !!userId,
     });
   };
 
@@ -67,5 +102,7 @@ export function useChat() {
     users,
     sendMessage,
     getMessages,
+    typingUsers,
+    sendTypingStatus,
   };
 }
