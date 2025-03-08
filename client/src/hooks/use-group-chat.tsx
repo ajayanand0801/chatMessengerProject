@@ -20,7 +20,17 @@ export function useGroupChat() {
   });
 
   useEffect(() => {
-    if (!isConnected || !socket) return;
+    if (!socket) return;
+    
+    // Log connection status to help debug
+    console.log("WebSocket connection status:", isConnected ? "Connected" : "Disconnected");
+    
+    if (!isConnected) {
+      console.log("WebSocket not connected, waiting...");
+      return;
+    }
+    
+    console.log("Setting up WebSocket listeners for group chat");
 
     const handleGroupMessage = (data: any) => {
       // Add new message to cache
@@ -168,20 +178,23 @@ export function useGroupChat() {
 
   const sendGroupMessage = useMutation({
     mutationFn: async ({ content, groupId, attachmentUrl }: InsertGroupMessage) => {
-      // Wait a bit to ensure socket is available
+      console.log("Sending group message:", { content, groupId, attachmentUrl });
+      console.log("Socket status:", { socket: !!socket, isConnected });
+      
+      // Wait for connection with improved timeout
       if (!socket || !isConnected) {
-        // Try to wait for connection
-        const waitForConnection = (maxAttempts = 5): Promise<void> => {
+        const waitForConnection = (maxAttempts = 10): Promise<void> => {
           return new Promise((resolve, reject) => {
             let attempts = 0;
             const checkConnection = () => {
               attempts++;
+              console.log(`Connection attempt ${attempts}, socket: ${!!socket}, connected: ${isConnected}`);
               if (socket && isConnected) {
                 resolve();
               } else if (attempts >= maxAttempts) {
                 reject(new Error("WebSocket connection timeout"));
               } else {
-                setTimeout(checkConnection, 500);
+                setTimeout(checkConnection, 1000);
               }
             };
             checkConnection();
@@ -189,14 +202,26 @@ export function useGroupChat() {
         };
         
         try {
+          console.log("Waiting for connection...");
           await waitForConnection();
+          console.log("Connection established");
         } catch (error) {
           console.error("WebSocket connection failed:", error);
+          toast({
+            title: "Connection Error",
+            description: "Could not connect to chat server. Please refresh the page.",
+            variant: "destructive",
+          });
           throw new Error("WebSocket not connected. Please try again later.");
         }
       }
       
       if (!socket || !isConnected) {
+        toast({
+          title: "Connection Error",
+          description: "Not connected to chat server. Please refresh the page.",
+          variant: "destructive",
+        });
         throw new Error("WebSocket not connected");
       }
       
