@@ -1,5 +1,4 @@
-
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Group, GroupMessage, InsertGroupMessage } from "@shared/schema";
 import { useAuth } from "./use-auth";
@@ -21,15 +20,15 @@ export function useGroupChat() {
 
   useEffect(() => {
     if (!socket) return;
-    
+
     // Log connection status to help debug
     console.log("WebSocket connection status:", isConnected ? "Connected" : "Disconnected");
-    
+
     if (!isConnected) {
       console.log("WebSocket not connected, waiting...");
       return;
     }
-    
+
     console.log("Setting up WebSocket listeners for group chat");
 
     const handleGroupMessage = (data: any) => {
@@ -41,7 +40,7 @@ export function useGroupChat() {
           if (oldData.some(m => m.message.id === data.id)) {
             return oldData;
           }
-          
+
           return [
             ...oldData,
             {
@@ -63,27 +62,27 @@ export function useGroupChat() {
 
     const handleGroupTyping = (data: any) => {
       const { userId, groupId, isTyping } = data;
-      
+
       setTypingUsers(prev => {
         const newMap = new Map(prev);
         let groupTypers = newMap.get(groupId) || new Set();
-        
+
         if (isTyping) {
           groupTypers.add(userId);
         } else {
           groupTypers.delete(userId);
         }
-        
+
         newMap.set(groupId, groupTypers);
         return newMap;
       });
-      
+
       // Clear typing status after 3 seconds of no updates
       const timeoutKey = `${groupId}-${userId}`;
       if (typingTimeoutRef.current[timeoutKey]) {
         clearTimeout(typingTimeoutRef.current[timeoutKey]);
       }
-      
+
       if (isTyping) {
         typingTimeoutRef.current[timeoutKey] = setTimeout(() => {
           setTypingUsers(prev => {
@@ -147,19 +146,19 @@ export function useGroupChat() {
     socket.addEventListener("message", (event) => {
       try {
         const data = JSON.parse(event.data);
-        
+
         if (data.type === "groupMessage") {
           handleGroupMessage(data.data);
         }
-        
+
         if (data.type === "groupTyping") {
           handleGroupTyping(data.data);
         }
-        
+
         if (data.type === "groupMessageEdit") {
           handleGroupMessageEdit(data.data);
         }
-        
+
         if (data.type === "groupMessageDelete") {
           handleGroupMessageDelete(data.data);
         }
@@ -178,53 +177,38 @@ export function useGroupChat() {
 
   const sendGroupMessage = useMutation({
     mutationFn: async ({ content, groupId, attachmentUrl }: InsertGroupMessage) => {
-      console.log("Sending group message:", { content, groupId, attachmentUrl });
-      console.log("Socket status:", { socket: !!socket, isConnected });
-      
-      // Wait for connection with improved timeout
-      if (!socket || !isConnected) {
-        const waitForConnection = (maxAttempts = 10): Promise<void> => {
-          return new Promise((resolve, reject) => {
-            let attempts = 0;
-            const checkConnection = () => {
-              attempts++;
-              console.log(`Connection attempt ${attempts}, socket: ${!!socket}, connected: ${isConnected}`);
-              if (socket && isConnected) {
-                resolve();
-              } else if (attempts >= maxAttempts) {
-                reject(new Error("WebSocket connection timeout"));
-              } else {
-                setTimeout(checkConnection, 1000);
-              }
-            };
-            checkConnection();
-          });
-        };
-        
+      console.log("Attempting to send group message:", { content, groupId });
+
+      // Check for socket connection
+      if (!socket) {
+        console.error("WebSocket object is not available");
+        throw new Error("WebSocket not available. Please refresh the page.");
+      }
+
+      if (!isConnected) {
+        console.log("WebSocket not connected, trying fallback API method");
+
+        // Fallback to API if WebSocket is not connected
         try {
-          console.log("Waiting for connection...");
-          await waitForConnection();
-          console.log("Connection established");
-        } catch (error) {
-          console.error("WebSocket connection failed:", error);
-          toast({
-            title: "Connection Error",
-            description: "Could not connect to chat server. Please refresh the page.",
-            variant: "destructive",
+          const res = await fetch(`/api/groups/${groupId}/messages`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ content, groupId, attachmentUrl }),
           });
-          throw new Error("WebSocket not connected. Please try again later.");
+
+          if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.message || "Failed to send message");
+          }
+
+          const data = await res.json();
+          return data;
+        } catch (error) {
+          console.error("Fallback API failed:", error);
+          throw error;
         }
       }
-      
-      if (!socket || !isConnected) {
-        toast({
-          title: "Connection Error",
-          description: "Not connected to chat server. Please refresh the page.",
-          variant: "destructive",
-        });
-        throw new Error("WebSocket not connected");
-      }
-      
+
       socket.send(
         JSON.stringify({
           type: "groupChat",
@@ -246,7 +230,7 @@ export function useGroupChat() {
       if (!socket || !isConnected) {
         throw new Error("WebSocket not connected");
       }
-      
+
       socket.send(
         JSON.stringify({
           type: "groupEditMessage",
@@ -268,7 +252,7 @@ export function useGroupChat() {
       if (!socket || !isConnected) {
         throw new Error("WebSocket not connected");
       }
-      
+
       socket.send(
         JSON.stringify({
           type: "groupDeleteMessage",
@@ -287,7 +271,7 @@ export function useGroupChat() {
 
   const sendGroupTypingStatus = (groupId: number, isTyping: boolean) => {
     if (!socket || !isConnected || !user) return;
-    
+
     socket.send(
       JSON.stringify({
         type: "groupTyping",
@@ -321,5 +305,3 @@ export function useGroupChat() {
     sendGroupTypingStatus,
   };
 }
-
-import { useRef } from "react";
